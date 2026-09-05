@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <title>奉天宮電子行事曆白板</title>
+  <script>
+    // 📌 核心設定：請把下方雙引號內的網址，直接替換成您的 GAS 正式網址（網尾是 /exec 的那一串）
+    // 💡 放在最頂端第 9 行，一進來就能立刻看到，不用再辛苦翻到最下面找了！
+    const targetGasUrl = "https://script.google.com/macros/s/AKfycbwqem1n7wvmalh46yOzFEcsAorE1ibiqX3j43cfXWw3V4-3L0gTJDxlNYzcvmvE7szp/exec";
+  </script>
+  <style>
+    /* 全域鎖定：鎖死 100% 滿版，絕對不出現捲軸 */
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100vw;
+      height: 100vh;
+      background-color: #ffffff;
+      overflow: hidden; 
+      font-family: "Microsoft JhengHei", "微軟正黑體", sans-serif;
+    }
+
+    /* 外層比例固定容器（智慧自適應） */
+    .scale-wrapper {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      width: 1920px;  
+      height: 1000px; 
+      margin-left: -960px; 
+      margin-top: -500px;  
+      transform-origin: center center;
+      background: #ffffff;
+      box-sizing: border-box;
+      display: flex;
+    }
+
+    /* 整體大框架（粗紅框） */
+    .calendar-container { 
+      display: flex; 
+      width: 100%;
+      height: 100%; 
+      border: 4px solid #b32424; 
+      box-sizing: border-box; 
+    }
+
+    /* 最左方大標題欄位 */
+    .header-column { 
+      width: 55px; 
+      min-width: 55px;
+      max-width: 55px;
+      border-right: 2px solid #b32424;
+      color: #b32424; 
+      display: flex; 
+      flex-direction: column; 
+      justify-content: flex-start; 
+      align-items: center; 
+      font-size: 28px; 
+      font-weight: bold; 
+      writing-mode: vertical-rl; 
+      text-orientation: upright; 
+      padding-top: 25px;
+      background-color: #ffffff;
+      box-sizing: border-box;
+    }
+
+    /* 表格容器 */
+    .table-wrapper {
+      flex: 1;
+      height: 100%;
+      overflow: hidden;
+      box-sizing: border-box;
+    }
+
+    /* 固定分配比例的表格結構 */
+    table {
+      width: 100%;
+      height: 100%;
+      border-collapse: collapse;
+      table-layout: fixed; 
+    }
+
+    /* 所有儲存格的邊框與對齊設定 */
+    td, th {
+      border-right: 1px solid #000000;
+      border-bottom: 1px solid #000000;
+      text-align: center;
+      vertical-align: middle; 
+      padding: 0;
+      margin: 0;
+      box-sizing: border-box;
+    }
+    
+    tr:last-child td {
+      border-bottom: none !important;
+    }
+
+    /* 左方欄位名稱欄（寬度鎖定） */
+    .label-cell {
+      width: 68px; 
+      min-width: 68px;
+      max-width: 68px;
+      font-size: 23px; 
+      font-weight: bold;
+      color: #000000;
+      background-color: #ffffff;
+      border-right: 2px solid #b32424; 
+    }
+
+    /* 名稱直寫樣式 */
+    .label-vertical {
+      writing-mode: vertical-rl;
+      text-orientation: upright;
+      letter-spacing: 5px;
+      line-height: 1.2;
+      text-align: center;
+      display: block;
+      width: 100%;
+    }
+
+    /* 前三列高度與大字體固定 */
+    .row-solar-height { height: 55px; font-size: 26px; font-weight: bold; } 
+    .row-week-height  { height: 45px; font-size: 21px; font-weight: bold; } 
+    .row-lunar-height { height: 50px; font-size: 19px; font-weight: bold; color: #444444; } 
+    
+    /* 廟務與行程事項的高度比重固定 */
+    .row-temple-height {
+      height: 350px; 
+      border-bottom: 1px dashed #000000 !important; 
+    }
+    
+    .row-general-height {
+      height: 500px;
+    }
+    
+    .weekend { color: #d9534f; }
+
+    /* 行程外容器：滿版排列 */
+    .event-flex-container {
+      display: flex;
+      flex-direction: row; 
+      justify-content: center;   
+      align-items: flex-start;  
+      height: 100%;
+      width: 100%;
+      box-sizing: border-box;
+      padding: 12px 2px 4px 2px;
+      overflow: hidden;
+    }
+
+    /* 網頁標準直寫文字（支援超過底部自動換行、靠上置頂對齊） */
+    .event-item { 
+      writing-mode: vertical-lr; 
+      text-orientation: upright;  
+      margin: 0 4px; 
+      font-size: 22px; 
+      line-height: 1.25;
+      font-weight: bold;
+      color: #000000;
+      white-space: normal;   
+      word-break: break-all; 
+      vertical-align: top;   
+      max-height: 94%;      
+      display: inline-block;
+      text-align: left; 
+    }
+  </style>
+</head>
+<body>
+
+<div class="scale-wrapper" id="resize-wrapper">
+  <div class="calendar-container">
+    <!-- 左側大標題 -->
+    <div class="header-column" id="month-title">讀取中...</div>
+    
+    <div class="table-wrapper">
+      <table id="calendar-table">
+        <!-- 1. 日期列 -->
+        <tr class="row-solar-height" id="tr-solar">
+          <td class="label-cell">日期</td>
+        </tr>
+        <!-- 2. 星期列 -->
+        <tr class="row-week-height" id="tr-week">
+          <td class="label-cell">星期</td>
+        </tr>
+        <!-- 3. 農曆列 -->
+        <tr class="row-lunar-height" id="tr-lunar">
+          <td class="label-cell">農曆</td>
+        </tr>
+        <!-- 4. 廟務列 -->
+        <tr class="row-temple-height" id="tr-temple">
+          <td class="label-cell"><span class="label-vertical">廟務</span></td>
+        </tr>
+        <!-- 5. 行程事項列 -->
+        <tr class="row-general-height" id="tr-general">
+          <td class="label-cell"><span class="label-vertical">行程事項</span></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+  // 自動每 10 分鐘重新整理網頁
+  setInterval(function(){ location.reload(); }, 600000);
+
+  // 智慧自動等比例縮放
+  function doResize() {
+    const wrapper = document.getElementById('resize-wrapper');
+    const baseWidth = 1920;
+    const baseHeight = 1000;
+    
+    const winWidth = window.innerWidth;
+    const winHeight = window.innerHeight;
+    
+    const scaleX = winWidth / baseWidth;
+    const scaleY = winHeight / baseHeight;
+    const scale = Math.min(scaleX, scaleY); 
+    
+    wrapper.style.transform = `scale(${scale})`;
+  }
+  
+  window.addEventListener('resize', doResize);
+  window.addEventListener('DOMContentLoaded', doResize);
+
+  // 精準西式 月/日 農曆轉換
+  function getLunarDateStr(year, month, day) {
+    try {
+      const date = new Date(year, month - 1, day);
+      const formatter = new Intl.DateTimeFormat('zh-TW-u-ca-chinese', { day: 'numeric', month: 'numeric' });
+      return formatter.format(date); 
+    } catch(e) { return "-"; }
+  }
+
+  const weekNames = ["日", "一", "二", "三", "四", "五", "六"];
+
+  // 自動執行跨網域 JSONP 連線
+  function loadCalendarData() {
+    const script = document.createElement('script');
+    script.src = targetGasUrl + "?callback=renderCalendar";
+    document.body.appendChild(script);
+  }
+
+  // 接收並渲染表格資料
+  window.renderCalendar = function(data) {
+    document.getElementById('month-title').innerText = data.month + "月份行事曆";
+    
+    const trSolar = document.getElementById('tr-solar');
+    const trWeek = document.getElementById('tr-week');
+    const trLunar = document.getElementById('tr-lunar');
+    const trTemple = document.getElementById('tr-temple');
+    const trGeneral = document.getElementById('tr-general');
+    
+    let dayWidthWeights = [];
+    let totalWeight = 0;
+    
+    for (let d = 1; d <= data.totalDays; d++) {
+      let tCount = 0;
+      let gCount = 0;
+      let maxTextLength = 0; 
+      
+      if (data.events[d] && data.events[d].length > 0) {
+        data.events[d].forEach(function(evt) {
+          if (!evt) return; 
+          let cleanTxt = evt.replace("廟務：", "").replace("廟務:", "").replace("廟務", "");
+          if (cleanTxt.length > maxTextLength) {
+            maxTextLength = cleanTxt.length;
+          }
+          if (evt.indexOf("廟務：") === 0 || evt.indexOf("廟務:") === 0 || evt.indexOf("廟務") === 0) {
+            tCount++;
+          } else {
+            gCount++;
+          }
+        });
+      }
+      
+      let maxCount = Math.max(tCount, gCount);
+      let weight = 1; 
+      if (maxCount === 1) weight = (maxTextLength > 15) ? 1.6 : 1.2;
+      if (maxCount === 2) weight = (maxTextLength > 12) ? 2.3 : 1.8;
+      if (maxCount >= 3) weight = (maxTextLength < 6) ? 2.0 : 3.2;
+      
+      dayWidthWeights[d] = weight;
+      totalWeight += weight;
+    }
+
+    for (let d = 1; d <= data.totalDays; d++) {
+      const dateObj = new Date(data.year, data.month - 1, d);
+      const weekDay = dateObj.getDay();
+      const isWeekend = (weekDay === 0 || weekDay === 6);
+      const lunarStr = getLunarDateStr(data.year, data.month, d); 
+      
+      let templeItemsHtml = "";
+      let generalItemsHtml = "";
+      
+      if (data.events[d] && data.events[d].length > 0) {
+        data.events[d].forEach(function(evt) {
+          if (!evt) return;
+          if (evt.indexOf("廟務：") === 0 || evt.indexOf("廟務:") === 0 || evt.indexOf("廟務") === 0) {
+            let cleanTxt = evt.replace("廟務：", "").replace("廟務:", "").replace("廟務", "");
+            templeItemsHtml += `<div class="event-item">${cleanTxt}</div>`;
+          } else {
+            generalItemsHtml += `<div class="event-item">${evt}</div>`;
+          }
+        });
+      }
+      
+      let cellPercent = (dayWidthWeights[d] / totalWeight) * 100 + "%";
+      
+      let tdSolar = document.createElement('td');
+      tdSolar.style.width = cellPercent; 
+      if (isWeekend) tdSolar.className = 'weekend';
+      tdSolar.innerText = d;
+      trSolar.appendChild(tdSolar);
+      
+      let tdWeek = document.createElement('td');
+      if (isWeekend) tdWeek.className = 'weekend';
+      tdWeek.innerText = weekNames[weekDay];
+      trWeek.appendChild(tdWeek);
+      
+      let tdLunar = document.createElement('td');
+      tdLunar.innerText = lunarStr;
+      trLunar.appendChild(tdLunar);
+      
+      let tdTemple = document.createElement('td');
+      if (templeItemsHtml !== "") tdTemple.innerHTML = `<div class="event-flex-container">${templeItemsHtml}</div>`;
+      trTemple.appendChild(tdTemple);
+      
+      let tdGeneral = document.createElement('td');
+      if (generalItemsHtml !== "") tdGeneral.innerHTML = `<div class="event-flex-container">${generalItemsHtml}</div>`;
+      trGeneral.appendChild(tdGeneral);
+    }
+    
+    doResize();
+    setTimeout(doResize, 200);
+  };
+
+  // 執行加載
+  loadCalendarData();
+</script>
+</body>
+</html>
